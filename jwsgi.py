@@ -1,0 +1,866 @@
+import io
+import functools
+import urllib.parse
+import json
+import email
+import http.cookies
+import pathlib
+import string
+import types
+import builtins
+import itertools
+import hashlib
+import datetime
+
+def environ_defaults(environ):
+	# The HTTP request method, such as "GET" or "POST".
+	# This cannot ever be an empty string, and so is always required.
+	try:
+		if not environ['REQUEST_METHOD']:
+			environ['REQUEST_METHOD'] = 'GET'
+	except KeyError:
+		environ['REQUEST_METHOD'] = 'GET'
+
+	# The initial portion of the request URL's "path" that corresponds
+	# to the application object,
+	# so that the application knows its virtual "location".
+	# This _may_ be an empty string, if the application corresponds
+	# to the "root" of the server.
+	try:
+		environ['SCRIPT_NAME']
+	except KeyError:
+		environ['SCRIPT_NAME'] = ''
+
+	# The remainder of the request URL's "path", [after SCRIPT_NAME],
+	# designating the virtual "location" of the request's target within the application.
+	# This may be an empty string, if the request URL targets the application root
+	# and does not have a trailing slash.
+	try:
+		environ['PATH_INFO']
+	except KeyError:
+		environ['PATH_INFO'] = ''
+
+	# The portion of the request URL that follows the "?", if any.
+	# May be empty or absent.
+	try:
+		environ['QUERY_STRING']
+	except KeyError:
+		environ['QUERY_STRING'] = ''
+
+	# The contents of any Content-Type fields in the HTTP request.
+	# May be empty or absent.
+	try:
+		if not environ['CONTENT_TYPE']:
+			# Empty string, fallback to default behaviour.
+			raise KeyError
+	except KeyError:
+		environ['CONTENT_TYPE'] = ''
+
+	# Doesn't exist in WSGI spec. We use it, however.
+	try:
+		if not environ['CONTENT_ENCODING']:
+			# Empty sting, fallback to default behaviour.
+			raise KeyError
+	except KeyError:
+		environ['CONTENT_ENCODING'] = 'utf-8'
+
+	# The contents of any Content-Length fields in the HTTP request.
+	# May be empty or absent.
+	try:
+		environ['CONTENT_LENGTH'] = int(environ['CONTENT_LENGTH'] or 0)
+	except ValueError:
+		# Fallback to default...
+		raise KeyError
+	except KeyError:
+		# TODO: This is insane. Calculate it, if we can.
+		environ['CONTENT_LENGTH'] = 0
+
+	# When HTTP_HOST is not set, these variables can be combined to determine a default.
+	# SERVER_NAME and SERVER_PORT are required strings and must never be empty.
+	try:
+		environ['SERVER_NAME']
+		environ['SERVER_PORT']
+	except KeyError:
+		try:
+			environ['SERVER_NAME'] = environ['HTTP_HOST'].split(":")[0]
+			environ['SERVER_PORT'] = environ['HTTP_HOST'].split(":")[1]
+		except IndexError:
+			# Badly behaved HTTP_HOST
+			raise KeyError
+		except KeyError:
+			# Default values
+			environ['SERVER_NAME'] = 'localhost'
+			environ['SERVER_PORT'] = 8080
+
+	# The version of the protocol the client used to send the request.
+	# Typically this will be something like "HTTP/1.0" or "HTTP/1.1"
+	# and may be used by the application to determine how to treat any HTTP request headers.
+	# (This variable should probably be called REQUEST_PROTOCOL, since it denotes the protocol
+	# used in the request, and is not necessarily the protocol that will be used in the server's response.
+	# However, for compatibility with CGI we have to keep the existing name.)
+	try:
+		environ['SERVER_PROTOCOL']
+	except KeyError:
+		# Sensible default...
+		environ['SERVER_PROTOCOL'] = 'HTTP/1.1'
+
+	# Note: HTTP_* names:
+	# Variables corresponding to the client-supplied HTTP request headers
+	# (i.e., variables whose names begin with "HTTP_").
+	# The presence or absence of these variables should correspond with the
+	# presence or absence of the appropriate HTTP header in the request.
+
+	# The tuple (1, 0), representing WSGI version 1.0.
+	environ['wsgi.version'] = (1, 0)
+
+	# A string representing the "scheme" portion of the URL at
+	# which the application is being invoked.
+	# Normally, this will have the value "http" or "https", as appropriate.
+	try:
+		environ['wsgi.url_scheme']
+	except KeyError:
+		environ['wsgi.url_scheme'] = environ['SERVER_PROTOCOL'].split("/")[0].lower()
+
+	# An input stream (file-like object) from which the HTTP request
+	# body bytes can be read. (The server or gateway may perform reads
+	# on-demand as requested by the application, or it may pre- read
+	# the client's request body and buffer it in-memory or on disk,
+	# or use any other technique for providing such an input stream,
+	# according to its preference.)
+	try:
+		environ['wsgi.input']
+	except KeyError:
+		environ['wsgi.input'] = io.BytesIO()
+
+	# An output stream (file-like object) to which error output can be written,
+	# for the purpose of recording program or other errors in a standardized
+	# and possibly centralized location. This should be a "text mode"
+	# stream; i.e., applications should use "\n" as a line ending, and assume
+	# that it will be converted to the correct line ending by the server/gateway.
+
+	# (On platforms where the str type is unicode, the error stream should
+	# accept and log arbitrary unicode without raising an error; it is allowed,
+	# however, to substitute characters that cannot be rendered in the stream's encoding.)
+
+	# For many servers, wsgi.errors will be the server's main error log.
+	# Alternatively, this may be sys.stderr, or a log file of some sort.
+	# The server's documentation should include an explanation of how to configure
+	# this or where to find the recorded output.
+	# A server or gateway may supply different error streams to different applications, if this is desired.
+	try:
+		environ['wsgi.errors']
+	except KeyError:
+		environ['wsgi.errors'] = io.StringIO()
+
+	# This value should evaluate true if the application object may be simultaneously
+	# invoked by another thread in the same process, and should evaluate false otherwise.
+	try:
+		environ['wsgi.multithread']
+	except KeyError:
+		environ['wsgi.multithread'] = False
+
+	# This value should evaluate true if an equivalent application object may be simultaneously
+	# invoked by another process, and should evaluate false otherwise.
+	try:
+		environ['wsgi.multiprocess']
+	except KeyError:
+		environ['wsgi.multiprocess'] = False
+
+	# This value should evaluate true if the server or gateway expects
+	# (but does not guarantee!) that the application will only be invoked
+	# this one time during the life of its containing process. Normally,
+	# this will only be true for a gateway based on CGI (or something similar).
+	try:
+		environ['wsgi.run_once']
+	except KeyError:
+		environ['wsgi.run_once'] = False
+
+	# Our own server values...
+	environ['jwsgi.version'] = (0, 0, 0)
+	environ['SERVER_SOFTWARE'] = 'jwsgi:{}'.format(environ['jwsgi.version'])
+
+	return environ
+
+def status_code(code):
+	# https://www.iana.org/assignments/http-status-codes/http-status-codes.txt
+
+	informational = {
+		100: "Continue",
+		101: "Switching Protocols",
+		102: "Processing",
+		103: "Early Hints"
+	}
+	for i in range(104, 200):
+		informational[i] = "Unassigned"
+
+	success = {
+		200: "OK",
+		201: "Created",
+		202: "Accepted",
+		203: "Non-Authoritative Information",
+		204: "No Content",
+		205: "Reset Content",
+		206: "Partial Content",
+		207: "Multi-Status",
+		208: "Already Reported"
+	}
+	for i in range(209, 226):
+		success[i] = "Unassigned"
+	
+	success[226] = "IM Used"
+	
+	for i in range(227, 300):
+		success[i] = "Unassigned"
+
+	redirection = {
+		300: "Multiple Choices",
+		301: "Moved Permanently",
+		302: "Found",
+		303: "See Other",
+		304: "Not Modified",
+		305: "Use Proxy",
+		306: "(Unused)",
+		307: "Temporary Redirect",
+		308: "Permanent Redirect"
+	}
+	for i in range(309, 400):
+		redirection[i] = "Unassigned"
+
+	client_error = {
+		400: "Bad Request",
+		401: "Unauthorized",
+		402: "Payment Required",
+		403: "Forbidden",
+		404: "Not Found",
+		405: "Method Not Allowed",
+		406: "Not Acceptable",
+		407: "Proxy Authentication Required",
+		408: "Request Timeout",
+		409: "Conflict",
+		410: "Gone",
+		411: "Length Required",
+		412: "Precondition Failed",
+		413: "Payload Too Large",
+		414: "URI Too Long",
+		415: "Unsupported Media Type",
+		416: "Range Not Satisfiable",
+		417: "Expectation Failed",
+		421: "Misdirected Request",
+		422: "Unprocessable Entity",
+		423: "Locked",
+		424: "Failed Dependency",
+		425: "Too Early",
+		426: "Upgrade Required",
+		428: "Precondition Required",
+		429: "Too Many Requests",
+		431: "Request Header Fields Too Large",
+		451: "Unavailable For Legal Reasons"
+	}
+	for i in range(418, 421):
+		client_error[i] = "Unassigned"
+	client_error[427] = "Unassigned",
+	client_error[430] = "Unassigned"
+	for i in range(432, 451):
+		client_error[i] = "Unassigned"
+
+	server_error = {
+		500: "Internal Server Error",
+		501: "Not Implemented",
+		502: "Bad Gateway",
+		503: "Service Unavailable",
+		504: "Gateway Timeout",
+		505: "HTTP Version Not Supported",
+		506: "Variant Also Negotiates",
+		507: "Insufficient Storage",
+		508: "Loop Detected",
+		510: "Not Extended",
+		511: "Network Authentication Required"
+	}
+	server_error[509] = "Unassigned"
+	for i in range(512, 600):
+		server_error[i] = "Unassigned"
+
+	code_dict = {}
+	code_dict = {**code_dict, **informational}
+	code_dict = {**code_dict, **success}
+	code_dict = {**code_dict, **redirection}
+	code_dict = {**code_dict, **client_error}
+	code_dict = {**code_dict, **server_error}
+
+	try:
+		return code_dict[code]
+	except KeyError:
+		return 'Unknown'
+
+class DictNamespace(object):
+	def __init__(self, **kwargs):
+		self.datum = types.SimpleNamespace(**kwargs)
+
+	def __getattr__(self, name):
+		try:
+			return getattr(self.datum, name)
+		except TypeError:
+			return self.__getitem__(name)
+
+	def __repr__(self):
+		return self.datum.__repr__()
+
+	def __eq__(self, other):
+		if isinstance(self, DictNamespace) and isinstance(other, DictNamespace):
+			return self.datum == other.datum
+		else:
+			return False
+
+	def __getitem__(self, item):
+		return getattr(self.datum, item)
+
+class Request(object):
+	def __init__(self, environ):
+		self.environ = environ_defaults(environ)
+
+	def __str__(self):
+		return "Request({})".format(str(self.environ))
+
+	def data(self):
+		"""
+		Combined access to json, form, and query data.
+		"""
+
+		d = []
+		if self.environ['CONTENT_TYPE'] == 'application/json':
+			d.extend(list(self.json().items()))
+		else:
+			d.extend(self.form())
+		d.extend(self.query())
+
+		return d
+
+	def cookies(self):
+		try:
+			jar = http.cookies.BaseCookie(self.environ['HTTP_COOKIE'])
+
+			# Convert to dictionary for easier life...
+			ret = {}
+			for k, v in jar.items():
+				ret[k] = dict(v)
+			return ret
+		except http.cookies.CookieError:
+			return None
+
+	def get_cookie(self, name, default=None):
+		cookies = self.cookies()
+		if not cookies:
+			return default
+
+		try:
+			return cookies[name]
+		except KeyError:
+			return default
+
+	def query(self):
+		return urllib.parse.parse_qs(self.environ['QUERY_STRING'])
+
+	def body(self):
+		# Prevent reading problems...
+		if hasattr(self, '_input'):
+			return self._input
+
+		# TODO: Limits...
+
+		# TODO: Reflect encoding...
+
+		self._input = self.environ['wsgi.input'].read(int(self.environ['CONTENT_LENGTH']))
+		return self._input
+
+	def json(self):
+		if self.environ['CONTENT_TYPE'] == 'application/json':
+			raw = self.body()
+			try:
+				return json.loads(raw)
+			except:
+				return {}
+		else:
+			return {}
+
+	def form(self):
+		if self.environ['CONTENT_TYPE'] == 'application/x-www-form-urlencoded':
+			raw = self.body()
+			return urllib.parse.parse_qsl(raw)
+		elif self.environ['CONTENT_TYPE'].startswith('multipart/form-data;'):
+			raw = self.body()
+			
+			# Fake it being an email...
+			msg = (b"MIME-Version: 1.0\r\nContent-Type:"
+				+ self.environ['CONTENT_TYPE'].replace("multipart/form-data;", "multipart/mixed;").encode()
+				+ b"\r\n\r\n"
+				+ raw)
+
+			msg = email.message_from_string(msg.decode())
+			if msg.is_multipart():
+				data = []
+				for part in msg.get_payload():
+					name = part.get_param('name', header='content-disposition')
+					filename = part.get_param('filename', header='content-disposition')
+					payload = part.get_payload(decode=True)
+					data.append({"name": name, "filename": filename, "content": payload})
+				return data
+
+		return []
+
+	def uri(self):
+		url = self.environ['wsgi.url_scheme']+'://'
+		try:
+			url += self.environ['HTTP_HOST']
+		except KeyError:
+			url += self.environ['SERVER_NAME']
+			url += ':' + self.environ['SERVER_PORT']
+		url += urllib.parse.quote(self.environ['SCRIPT_NAME'])
+		url += urllib.parse.quote(self.environ['PATH_INFO'])
+
+		if self.environ['QUERY_STRING']:
+			url += '?' + self.environ['QUERY_STRING']
+
+		return urllib.parse.urlparse(url)
+
+class Response(object):
+	def __init__(self, environ):
+		self.environ = environ_defaults(environ)
+		self._cookies = False
+
+	def headers(self):
+		headers = []
+
+		# Things that shouldn't be handed back...
+		not_headers = ['HTTP_USER_AGENT',
+		'HTTP_HOST',
+		'HTTP_STATUS',
+		'HTTP_PROXY_ATHENTICATE',
+		'HTTP_PROXY_AUTHORIZATION',
+		'HTTP_TRANSFER_ENCODING',
+		'HTTP_UPGRADE']
+
+		# Ban when Hop-By-Hop
+		try:
+			if self.environ['HTTP_CONNECTION'].lower() == 'keep-alive':
+				not_headers.append('HTTP_CONNECTION')
+		except KeyError:
+			pass
+		try:
+			if self.environ['HTTP_TE'].lower() == 'trailers':
+				not_headers.append('HTTP_TE')
+		except KeyError:
+			pass
+
+		# Other headers...
+		for key, value in self.environ.items():
+			if key.startswith("HTTP_") and key not in not_headers:
+				# Handle Multi-headers:
+				if isinstance(value, list):
+					for v in value:
+						headers.append((key[5:], v))
+				else:
+					headers.append((key[5:], str(value)))
+
+		# Set-Cookie headers...
+		if self._cookies:
+			for cookie in self._cookies.values():
+				headers.append(('Set-Cookie', cookie.output(header='').lstrip()))
+
+		# Set the Content Type
+		headers.append(("Content-Type", "{}; charset={}".format(self.environ['CONTENT_TYPE'], self.environ['CONTENT_ENCODING'])))
+
+		return headers
+
+	def get_header(self, key, default=None):
+		return self.environ['HTTP_{}'.format(key)] or default
+
+	def set_header(self, key, value):
+		self.environ['HTTP_{}'.format(key)] = value
+
+	def append_header(self, key, value):
+		try:
+			if isinstance(self.environ['HTTP_{}'.format(key)], str):
+				self.environ['HTTP_{}'.format(key)] = [self.environ['HTTP_{}'.format(key)]]
+			self.environ['HTTP_{}'.format(key)].append(value)
+		except KeyError:
+			self.environ['HTTP_{}'.format(key)] = [value]
+
+	def set_cookie(self, name, value, secret=None, digestmod=hashlib.sha512, **options):
+		if not self._cookies:
+			self._cookies = http.cookies.SimpleCookie()
+
+		# TODO: Enable this...
+		#if 'secure' in options:
+		#	if secret == None:
+		#		raise http.cookies.CookieError('Secure requires secret.')
+
+		if secret:
+			# TODO
+			raise NotImplementedError
+
+		if len(name) + len(value) > 3800:
+			raise ValueError('Exceeds maximum allowed cookie length.')
+
+		# Set the man cookie value...
+		self._cookies[name] = value
+
+		# Set the attributes
+		for key, value in options.items():
+			if key.lower() in ('max_age', 'maxage', 'max-age'):
+				key = 'max-age'
+				if isinstance(value, datetime.timedelta):
+					value = value.seconds + value.days * 24 * 3600
+			if key == 'expires':
+				# Handle basic datetime conversions:
+				if isinstance(value, datetime.datetime):
+					value = value.utctimetuple()
+				elif isinstance(value, datetime.date):
+					value = value.timetuple()
+				if not isinstance(value, (int, float)):
+					value = calendar.timegm(value)
+				value = email.utils.formatdate(value, usegmt=True)
+			if key in ('same_site', 'samesite', 'same-site'):
+				key = 'samesite'
+				value = (value or "none").lower()
+				if value not in ('lax', 'strict', 'none'):
+					raise http.cookies.CookieError("Invalid samesite: {}".format(value))
+			if key in ('secure', 'httponly') and not value:
+				# Ignore disabling something we haven't set...
+				continue
+			# Set the attribute
+			self._cookies[name][key] = value
+
+	def del_cookie(self, key, **kwargs):
+		"""
+		Delete a cookie.
+		Footgun: path and domain must be the same as original cookie.
+		"""
+		self.set_cookie(key, '', max_age=-1, expires=0, **kwargs)
+
+	def redirect(self, path):
+		"""
+		Generate a 303 return to the given path.
+		The result should be returned by the routing function.
+		"""
+		self.environ['HTTP_STATUS'] = 303
+		self.set_header("Refresh", "0; URL={}".format(path))
+		return b''
+
+	def set_content_type(self, content_type):
+		self.environ['CONTENT_TYPE'] = content_type
+
+	def set_content_encoding(self, content_encoding):
+		self.environ['CONTENT_ENCODING'] = content_encoding
+
+	def __str__(self):
+		return "Response({})".format(str(self.environ))
+
+class App(object):
+	def __init__(self):
+		self.routes = {}
+		self.error_routes = {}
+		self.type_constructors = {}
+		self._hook_before = []
+		self._hook_after = []
+
+	def add_type_constructor(self, name, fn):
+		self.type_constructors[name] = fn
+
+	def hook_before(self):
+		"""
+		Add a function to a list to be called before a route.
+		The hook's self may be None.
+		"""
+		def hook_inner(func):
+			@functools.wraps(func)
+			def hook_wrapper(func_self, request, response):
+				# Note: func_self may be None
+				return func(func_self, request, response)
+
+			self._hook_before.append(hook_wrapper)
+			return hook_wrapper
+		return hook_inner
+
+	def hook_after(self):
+		"""
+		Add a function to a list to be called after a route.
+		The hook's self may be None.
+		This also runs after any error hook that may be called.
+		"""
+		def hook_inner(func):
+			@functools.wraps(func)
+			def hook_wrapper(func_self, request, response):
+				# Note: func_self may be None
+				return func(func_self, request, response)
+
+			self._hook_after.append(hook_wrapper)
+			return hook_wrapper
+		return hook_inner
+
+	def error(self, status_code):
+		"""
+		Change the response of any given HTTP status code.
+		"""
+		def error_route_inner(func):
+			@functools.wraps(func)
+			def wrapper(func_self, request, response):
+				# Note: func_self may be None
+				return func(func_self, request, response)
+
+			self.error_routes[status_code] = {"fn": wrapper}
+
+			return wrapper
+
+		return error_route_inner
+
+	def route(self, path_string, methods=['GET', 'HEAD', 'OPTIONS']):
+		"""
+		Install a function to be called for a given path,
+		with an acceptable list of methods
+		"""
+		methods = [x.upper() for x in set(methods)]
+
+		def route_inner(func):
+			@functools.wraps(func)
+			def wrapper(func_self, request, response):
+				return func(func_self, request, response)
+
+			if 'GET' in methods:
+				if 'HEAD' not in methods:
+					methods.append('HEAD')
+				if 'OPTIONS' not in methods:
+					methods.append('OPTIONS')
+
+			self.routes[path_string] = {"fn": wrapper, "methods": methods}
+
+			return wrapper
+
+		return route_inner
+
+	def get_paths(self, functor, methods=['GET']):
+		"""
+		Given a function or str(function name),
+		find the matching route/s with the given methods
+		"""
+
+		methods = [x.upper() for x in set(methods)]
+		if 'GET' in methods:
+			if 'HEAD' not in methods:
+				methods.append('HEAD')
+			if 'OPTIONS' not in methods:
+				methods.append('OPTIONS')
+
+		try:
+			search = functor.__name__
+		except AttributeError:
+			search = functor
+
+		r = []
+		for k, v in self.routes.items():
+			if any(method in v['methods'] for method in methods):
+				if v['fn'].__name__ == search:
+					r.append(k)
+		return r
+
+	def run(self, host='localhost', port=8080, server=None):
+		"""
+		Start up a development server.
+		"""
+		if server == None:
+			from wsgiref.simple_server import make_server
+			with make_server(host, port, self.wsgi()) as httpd:
+				print("WARNING: Using wsgiref's shitty server!")
+				print("Running at http://{}:{}".format(host, port))
+				httpd.serve_forever()
+		else:
+			# TODO: Basic support for handful of populars...
+			raise NotImplementedError
+
+	# Route matcher...
+	def find_route(self, request):
+		uri = request.uri()
+
+		for obj, cell in self.routes.items():
+			if (obj.count("{") == 0 or obj.count("}") == 0) or (obj.count("{") != obj.count("}")):
+				# Treat as static route...
+				if obj == uri.path:
+
+					# Check method here...
+					if request.environ.get('REQUEST_METHOD', 'GET') in cell['methods']:
+						RouteObject = DictNamespace(**cell)
+						return RouteObject
+			else:
+				# Treat as dynamic route...
+
+				if uri.path.count("/") == obj.count("/"):
+					parts_current = pathlib.PurePath(uri.path).parts
+					parts_func = pathlib.PurePath(obj).parts
+
+					if len(parts_current) == len(parts_func):
+						args = {}
+
+						found = True
+						for i in range(0, len(parts_func)):
+							if ((parts_func[i].count("{") == 0 or parts_func[i].count("}") == 0)
+								or (parts_func[i].count("{") != parts_func[i].count("}"))):
+								# Static part
+								if parts_func[i] != parts_current[i]:
+									found = False
+									break
+							else:
+								# Dynamic part (interpolate data...)
+								field, format_spec = [(fname, format_spec) for _, fname, format_spec, _ in string.Formatter().parse(parts_func[i]) if fname][0]
+
+								# Support typing on dynamic parts:
+								if format_spec:
+									type_class = None
+									# Allow custom constructors
+									if format_spec in self.type_constructors:
+										type_class = self.type_constructors[format_spec]
+									if type_class == None:
+										type_class = getattr(builtins, format_spec, None)
+									if type_class == None:
+										type_class = getattr(types, format_spec, None)
+									
+									if type_class == None:
+										raise TypeError("Type converter <{}> not found.".format(format_spec))
+
+									try:
+										args[field] = type_class(parts_current[i])
+									except:
+										raise TypeError("Bad type <{}> for <{}>".format(type_class, parts_current[i]))
+								else:
+									args[field] = parts_current[i]
+
+						if not found:
+							continue
+						else:
+							# Check method here...
+							if request.environ.get('REQUEST_METHOD', 'GET') in cell['methods']:
+								r = cell.copy()
+								r = {**r, **args.copy()}
+								RouteObject = DictNamespace(**r)
+								return RouteObject
+
+	def wsgi(self):
+		# TODO: We're supposed to catch our own exceptions here...
+		def app(environ, start_response):
+			environ = environ_defaults(environ)
+
+			# Default status code...
+			code = 200
+
+			# Build some kind of request object here...
+			request = Request(environ.copy())
+
+			# Build some kind of response object here...
+			res_env = environ.copy()
+			res_env['CONTENT_TYPE'] = ''
+			response = Response(res_env)
+
+			# Call route here...
+			route = None
+			body = None
+			try:
+				route = self.find_route(request)
+
+				if route == None:
+					response.environ['HTTP_STATUS'] = 404
+					
+					# Run before hooks...
+					for item in self._hook_before:
+						item(route, request, response)
+
+				else:
+
+					# Run before hooks...
+					for item in self._hook_before:
+						item(route, request, response)
+
+					# Run main route...
+					body = route.fn(route, request, response)
+			except Exception as e:
+				if isinstance(e, TypeError):
+					# User violated type specifier on route...
+					response.environ['HTTP_STATUS'] = 406
+
+					# Run before hooks...
+					for item in self._hook_before:
+						item(route, request, response)
+
+				else:
+					response.environ['HTTP_STATUS'] = 500
+
+					print("Exception:", e)
+
+					# Run before hooks...
+					for item in self._hook_before:
+						item(route, request, response)
+
+			# Get our response status
+			try:
+				code = int(response.environ['HTTP_STATUS'])
+			except KeyError:
+				code = 200
+				response.environ['HTTP_STATUS'] = code
+			except ValueError:
+				code = 500
+				response.environ['HTTP_STATUS'] = code
+
+			# Check for errors...
+			if response.environ['HTTP_STATUS'] in self.error_routes:
+				body = self.error_routes[response.environ['HTTP_STATUS']]['fn'](route, request, response)
+			else:
+				if body == None:
+					# Default error...
+					body = "Error: {}".format(status_code(response.environ['HTTP_STATUS'])).encode(response.environ['CONTENT_ENCODING'])
+
+			# Expose body for after hooks...
+			response.body = body
+
+			# Run after hooks...
+			for item in self._hook_after:
+				item(route, request, response)
+
+			# Generate the status
+			status = '{} {}'.format(code, status_code(code))
+
+			# Construct the appropriate body here...
+			if isinstance(body, bytes):
+				if not response.environ['CONTENT_TYPE']:
+					response.set_content_type("text/plain")
+				ret = body
+			elif isinstance(body, str):
+				if not response.environ['CONTENT_TYPE']:
+					response.set_content_type("text/html")
+				ret = body.encode(response.environ['CONTENT_ENCODING'])
+			elif isinstance(body, dict):
+				# Set the output to the correct content type...
+				if not response.environ['CONTENT_TYPE']:
+					response.set_content_type("application/json")
+				datum = json.dumps(body)
+				ret = datum.encode(response.environ['CONTENT_ENCODING'])
+			elif isinstance(body, list):
+				# Set the output to the correct content type...
+				if not response.environ['CONTENT_TYPE']:
+					response.set_content_type("application/json")
+				datum = json.dumps(body)
+				ret = datum.encode(response.environ['CONTENT_ENCODING'])
+			else:
+				# Unknown! Guess how to output it...
+				if not response.environ['CONTENT_TYPE']:
+					response.set_content_type("application/octet-stream")
+				ret = str(body).encode(response.environ['CONTENT_ENCODING'])
+
+			# Start the response
+			start_response(status, response.headers())
+
+			# Deliver the body
+			# Chunk body into 1024 byte size pieces...
+			return (ret[0+i:1024+i] for i in range(0, len(ret), 1024))
+
+		# Validate the app before returning it...
+		import wsgiref.validate
+		wsgiref.validate.validator(app)
+
+		return app
