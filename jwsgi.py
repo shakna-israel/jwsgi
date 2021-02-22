@@ -11,6 +11,54 @@ import builtins
 import itertools
 import hashlib
 import datetime
+import shlex
+
+class Template(string.Formatter):
+	def format(self, format_string, *args, **kwargs):
+		# Expose arguments...
+		self.args = args
+		self.kwargs = kwargs
+
+		return super(Template, self).format(format_string, *args, **kwargs)
+
+	def format_field(self, value, spec):
+		if spec.startswith('foreach'):
+			template = spec.partition(':')[-1]
+			if type(value) is dict:
+				value = value.items()
+			return ''.join([template.format(item=item) for item in value])
+		elif spec == '!' or spec == '()':
+			return value()
+		elif spec.startswith("(") and spec.endswith(')'):
+			# Grab the arguments...
+			args = shlex.split(spec[1:-1])
+
+			# Turn the arguments into their equivalents...
+			built_args = []
+			for arg in args:
+				# Allow the user to not realise how args are broken up...
+				if arg.endswith(","):
+					arg = arg[:-1]
+
+				# Use a template-aware sensible default:
+				if arg in self.kwargs:
+					built_args.append(self.kwargs[arg])
+				else:
+					built_args.append('')
+
+			# Call the function:
+			return value(*built_args)
+		elif spec.startswith('if'):
+			x = len(spec.partition(':')[-1].partition(':')[-1] or '')
+			# If-only
+			if x == 0:
+				return (value and spec.partition(':')[-1]) or (spec.partition(':')[-1].partition(':')[-1] or '')
+			else:
+				# If-else
+				x = x + 1
+				return (value and spec.partition(':')[-1][:-x]) or (spec.partition(':')[-1].partition(':')[-1] or '')
+		else:
+			return super(Template, self).format_field(value, spec)
 
 def environ_defaults(environ):
 	# The HTTP request method, such as "GET" or "POST".
@@ -178,6 +226,7 @@ def environ_defaults(environ):
 	# Our own server values...
 	environ['jwsgi.version'] = (0, 0, 0)
 	environ['SERVER_SOFTWARE'] = 'jwsgi:{}'.format(environ['jwsgi.version'])
+	environ['jwsgi.template_directory'] = 'templates'
 
 	return environ
 
@@ -551,6 +600,18 @@ class Response(object):
 
 	def set_content_encoding(self, content_encoding):
 		self.environ['CONTENT_ENCODING'] = content_encoding
+
+	def render_template(self, filename, **kwargs):
+		"""
+		A truly horrible template system...
+		"""
+		root = pathlib.Path(self.environ['jwsgi.template_directory'])
+
+		p = root / pathlib.Path(filename)
+		if p.exists():
+			with open(p, 'r') as openFile:
+				return Template().format(openFile.read(), **kwargs)
+
 
 	def __str__(self):
 		return "Response({})".format(str(self.environ))

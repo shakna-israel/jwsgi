@@ -56,6 +56,13 @@ def index(self, request, response):
 
 	return response.redirect(app.get_paths(serve_js)[0].format(filename='home'))
 
+@app.route("/template")
+def test_template(self, request, response):
+	def foo(first, last):
+		return first.upper() + " " + last.upper()
+
+	return response.render_template('horrible.tpl', foo=foo, name='eric', last='moe', books={'Title': 'Author'}, rockit=True)
+
 @app.route("/static/{filename}.js")
 @app.route("/{filename}.js")
 def serve_js(self, request, response):
