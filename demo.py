@@ -1,6 +1,6 @@
 import jwsgi
 
-app = jwsgi.App()
+app = jwsgi.App(secret="somepassword")
 
 @app.route("/other/thing/")
 def other(self, request, response):
@@ -40,6 +40,9 @@ def index(self, request, response):
 
 	print(request.environ['REQUEST_METHOD'])
 
+	somecookie2 = request.get_cookie('somecookie2')
+	#print("somecookie2", somecookie2)
+
 	#print(self['callback'])
 
 	#print(request.environ)
@@ -50,11 +53,16 @@ def index(self, request, response):
 	response.append_header("X-Multi", "B")
 	response.append_header("X-Multi", "C")
 
-	response.set_cookie("somecookie", "simple")
-	response.set_cookie("somecookie2", "secure", secure=True, httponly=True)
-	response.del_cookie("somecookie")
+	#response.set_cookie("somecookie", "simple")
+	#response.set_cookie("somecookie2", "secure", secure=True, httponly=True)
+	#response.del_cookie("somecookie")
 
-	return response.redirect(app.get_paths(serve_js)[0].format(filename='home'))
+	response.set_cookie("somecookie", "simple")
+	response.set_cookie("somecookie2", {"data": [1, 2, 3, 4]}, secure=True, httponly=True)
+
+	#return response.redirect(app.get_paths(serve_js)[0].format(filename='home'))
+
+	return request.cookies()
 
 @app.route("/template")
 def test_template(self, request, response):

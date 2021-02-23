@@ -12,6 +12,11 @@ import itertools
 import hashlib
 import datetime
 import shlex
+import base64
+import hmac
+
+import traceback
+import sys
 
 class Template(string.Formatter):
 	def format(self, format_string, *args, **kwargs):
@@ -364,8 +369,10 @@ class DictNamespace(object):
 		return getattr(self.datum, item)
 
 class Request(object):
-	def __init__(self, environ):
+	def __init__(self, environ, secret=None, digestmod=hashlib.sha512):
 		self.environ = environ_defaults(environ)
+		self.secret = secret
+		self.digestmod = digestmod
 
 	def __str__(self):
 		return "Request({})".format(str(self.environ))
@@ -392,9 +399,57 @@ class Request(object):
 			ret = {}
 			for k, v in jar.items():
 				ret[k] = dict(v)
+				ret[k]['value'] = v.value
+
+				# Workaround for if Python decides to add quoting...
+				if v.value[0] == '"' and v.value[-1] == '"':
+					ret[k]['value'] = v.value[1:-1]
+
+				# Detect if secret, and try and decode...
+				if self.secret != None:
+					try:
+						# Probably one of our secret cookies...
+						if ret[k]['value'][0] == '!':
+							# Extract out our signature and data...
+							sig, _, datum = ret[k]['value'].partition('?')
+							sig = sig[1:]
+
+							# Prepare for comparison
+							sig = base64.b64decode(sig)
+							datum = datum.encode()
+
+							# Pull down the secret so we aren't modifying it in place
+							secret = self.secret
+							if isinstance(secret, str):
+								secret = secret.encode()
+							
+							# Construct a comparison signature
+							try:
+								sig2 = hmac.new(secret, datum, digestmod=self.digestmod).digest()
+
+								# Run a comparison...
+								if hmac.compare_digest(sig, sig2):
+									datum = base64.b64decode(datum).decode()
+									
+									# If its json, decode it...
+									try:
+										datum = json.loads(datum)
+									except:
+										pass
+
+									# Worked, return decoded data!
+									ret[k]['value'] = datum
+							except:
+								pass
+
+					except IndexError:
+						pass
+
 			return ret
 		except http.cookies.CookieError:
-			return None
+			return {}
+		except KeyError:
+			return {}
 
 	def get_cookie(self, name, default=None):
 		cookies = self.cookies()
@@ -472,9 +527,11 @@ class Request(object):
 		return urllib.parse.urlparse(url)
 
 class Response(object):
-	def __init__(self, environ):
+	def __init__(self, environ, secret=None, digestmod=hashlib.sha512):
 		self.environ = environ_defaults(environ)
 		self._cookies = False
+		self.secret = secret
+		self.digestmod = digestmod
 
 	def headers(self):
 		headers = []
@@ -534,19 +591,36 @@ class Response(object):
 		except KeyError:
 			self.environ['HTTP_{}'.format(key)] = [value]
 
-	def set_cookie(self, name, value, secret=None, digestmod=hashlib.sha512, **options):
+	def set_cookie(self, name, value, **options):
+		secret = self.secret
+		digestmod = self.digestmod
+
 		if not self._cookies:
 			self._cookies = http.cookies.SimpleCookie()
 
-		# TODO: Enable this...
-		#if 'secure' in options:
-		#	if secret == None:
-		#		raise http.cookies.CookieError('Secure requires secret.')
+		# Enable this...
+		if 'secure' in options:
+			if secret == None:
+				raise http.cookies.CookieError('Secure requires secret.')
 
-		if secret:
-			# TODO
-			raise NotImplementedError
+			options['httponly'] = True
 
+			# The key should have a default lifetime...
+			if 'maxage' not in options:
+				options['maxage'] = 24 * 3600
+
+			if isinstance(secret, str):
+				secret = secret.encode()
+
+			if isinstance(value, dict) or isinstance(value, list):
+				value = json.dumps(value)
+			value = value.encode()
+
+			enc = base64.b64encode(value)
+			sig = base64.b64encode(hmac.new(secret, enc, digestmod=digestmod).digest())
+			value = "!{sig}?{enc}".format(enc=enc.decode(), sig=sig.decode())
+
+		# Cookies have a 4kb limit. And what 4Kb is can slightly differ across browsers...
 		if len(name) + len(value) > 3800:
 			raise ValueError('Exceeds maximum allowed cookie length.')
 
@@ -617,12 +691,14 @@ class Response(object):
 		return "Response({})".format(str(self.environ))
 
 class App(object):
-	def __init__(self):
+	def __init__(self, secret=None, digestmod=hashlib.sha512):
 		self.routes = {}
 		self.error_routes = {}
 		self.type_constructors = {}
 		self._hook_before = []
 		self._hook_after = []
+		self.secret = secret
+		self.digestmod = digestmod
 
 	def add_type_constructor(self, name, fn):
 		self.type_constructors[name] = fn
@@ -812,12 +888,12 @@ class App(object):
 			code = 200
 
 			# Build some kind of request object here...
-			request = Request(environ.copy())
+			request = Request(environ.copy(), secret=self.secret, digestmod=self.digestmod)
 
 			# Build some kind of response object here...
 			res_env = environ.copy()
 			res_env['CONTENT_TYPE'] = ''
-			response = Response(res_env)
+			response = Response(res_env, secret=self.secret, digestmod=self.digestmod)
 
 			# Call route here...
 			route = None
@@ -841,6 +917,11 @@ class App(object):
 					# Run main route...
 					body = route.fn(route, request, response)
 			except Exception as e:
+				# TODO:
+				print("Exception", e)
+				traceback.print_stack()
+				print(sys.exc_info())
+
 				if isinstance(e, TypeError):
 					# User violated type specifier on route...
 					response.environ['HTTP_STATUS'] = 406
@@ -851,8 +932,6 @@ class App(object):
 
 				else:
 					response.environ['HTTP_STATUS'] = 500
-
-					print("Exception:", e)
 
 					# Run before hooks...
 					for item in self._hook_before:
