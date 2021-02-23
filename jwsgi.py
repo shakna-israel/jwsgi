@@ -32,6 +32,11 @@ class Template(string.Formatter):
 			if type(value) is dict:
 				value = value.items()
 			return ''.join([Template().format(template, item=item) for item in value])
+		elif spec.startswith('foridx'):
+			template = spec.partition(':')[-1]
+			if type(value) is dict:
+				value = value.items()
+			return ''.join([Template().format(template, item=item, idx=idx) for idx, item in enumerate(value)])
 		elif spec == '!' or spec == '()':
 			return value()
 		elif spec.startswith("(") and spec.endswith(')'):
@@ -80,7 +85,7 @@ class Template(string.Formatter):
 			else:
 				# Invert field/spec, slicing as appropriate...
 				field_name = field_name + ":" + format_spec.partition(":")[-1]
-				format_spec = format_spec.partition(":")[0]
+				format_spec = format_spec.partition(":")[0].lstrip()
 				yield (literal_text, format_spec, field_name, conversion)
 
 def environ_defaults(environ):
