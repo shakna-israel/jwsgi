@@ -54,7 +54,7 @@ class Template(string.Formatter):
 				if arg in self.kwargs:
 					built_args.append(self.kwargs[arg])
 				else:
-					built_args.append('')
+					built_args.append(arg)
 
 			# Call the function:
 			return value(*built_args)
@@ -704,11 +704,30 @@ class Response(object):
 		"""
 		root = pathlib.Path(self.environ['jwsgi.template_directory'])
 
+		if '_FILE_' not in kwargs:
+			kwargs['_FILE_'] = filename
+
+		# Allow including other templates inside itself:
+		if 'include' not in kwargs:
+			def inner_include(fname, **kwargs2):
+				# Combine with including context...
+				inner_dict = {**kwargs, **kwargs2}
+
+				if '_FILE_' in inner_dict:
+					inner_dict['_PARENT_FILE_'] = inner_dict['_FILE_']
+					inner_dict['_FILE_'] = fname
+
+				p = root / pathlib.Path(fname)
+				if p.exists():
+					with open(p, 'r') as openFile:
+						return Template().format(openFile.read(), **inner_dict)
+
+			kwargs['include'] = inner_include
+
 		p = root / pathlib.Path(filename)
 		if p.exists():
 			with open(p, 'r') as openFile:
 				return Template().format(openFile.read(), **kwargs)
-
 
 	def __str__(self):
 		return "Response({})".format(str(self.environ))

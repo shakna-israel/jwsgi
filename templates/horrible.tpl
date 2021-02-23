@@ -17,3 +17,7 @@ My name is {foo:(name, last)}
 	:
 <p>Don't rock it.</p>
 }
+
+<p>My filename is {_FILE_}</p>
+
+{include:("include.tpl")}
