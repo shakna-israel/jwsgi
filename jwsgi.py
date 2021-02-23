@@ -65,6 +65,24 @@ class Template(string.Formatter):
 		else:
 			return super(Template, self).format_field(value, spec)
 
+	def parse(self, format_string):
+		t = super(Template, self).parse(format_string)
+		t = list(t)
+
+		for cell in t:
+			literal_text, field_name, format_spec, conversion = cell
+			if format_spec and format_spec.startswith('(') and format_spec.endswith(')'):
+				# We don't need to rearrange anything on a function call!
+				yield cell
+			elif not format_spec:
+				# No spec, make no changes!
+				yield cell
+			else:
+				# Invert field/spec, slicing as appropriate...
+				field_name = field_name + ":" + format_spec.partition(":")[-1]
+				format_spec = format_spec.partition(":")[0]
+				yield (literal_text, format_spec, field_name, conversion)
+
 def environ_defaults(environ):
 	# The HTTP request method, such as "GET" or "POST".
 	# This cannot ever be an empty string, and so is always required.
