@@ -710,6 +710,11 @@ class Response(object):
 		# Allow including other templates inside itself:
 		if 'include' not in kwargs:
 			def inner_include(fname, **kwargs2):
+				"""include(filename)"""
+
+				# TODO: Allow args to be name/value tuples to workaround no keyword parsing in shlex?
+				# Do we need to do that? It inherits the environment...
+
 				# Combine with including context...
 				inner_dict = {**kwargs, **kwargs2}
 
@@ -722,6 +727,7 @@ class Response(object):
 					with open(p, 'r') as openFile:
 						return Template().format(openFile.read(), **inner_dict)
 
+			inner_include.__name__ == 'include'
 			kwargs['include'] = inner_include
 
 		p = root / pathlib.Path(filename)
