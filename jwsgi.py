@@ -31,7 +31,7 @@ class Template(string.Formatter):
 			template = spec.partition(':')[-1]
 			if type(value) is dict:
 				value = value.items()
-			return ''.join([template.format(item=item) for item in value])
+			return ''.join([Template().format(template, item=item) for item in value])
 		elif spec == '!' or spec == '()':
 			return value()
 		elif spec.startswith("(") and spec.endswith(')'):
