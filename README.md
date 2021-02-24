@@ -18,6 +18,14 @@ The documentation is generated with TeXInfo, and the supplied `Makefile` can hel
 
 Please be aware that until version 1.0.0 is reached, `jwsgi` will be undergoing breaking changes.
 
+You can see some hopefully up to date copies of the manual at:
+
++ [HTML](https://sixteenmm.org/personal/jwsgi/manual.html)
+
++ [PDF](https://sixteenmm.org/personal/jwsgi/manual.pdf)
+
++ [Plain Text](https://sixteenmm.org/personal/jwsgi/manual.txt)
+
 ---
 
 ## Installation
