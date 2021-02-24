@@ -1,0 +1,82 @@
+@node WSGI
+@chapter WSGI
+@cindex chapter, WSGI
+@findex jwsgi.App.wsgi
+
+@split
+
+The actual WSGI object of any program can be found at the @code{App().wsgi()} call site.
+
+That is to say:
+
+@cartouche
+@verbatim
+import jwsgi
+
+app = jwsgi.App()
+
+wsgi_app = app.wsgi()
+@end verbatim
+@end cartouche
+
+This app is automatically checked for standards verification before being returned by the @code{wsgi} method.
+
+It is the WSGI app, returned from the @code{wsgi} method, that you would pass to middlewares or a server, and @emph{not} the @code{jwsgi.App} class'd object.
+
+@split
+
+An example of plugging in an app to the popular CherryPy server:
+
+@cartouche
+@verbatim
+import jwsgi
+
+app = jwsgi.App()
+
+@app.route("/")
+def index(self, request, response):
+	return "<h1>Hello, World!</h1>"
+
+if __name__ == "__main__":
+	import cherrypy
+	cherrypy.tree.graft(app.wsgi(), '/')
+	cherrypy.engine.start()
+	cherrypy.engine.block()
+@end verbatim
+@end cartouche
+
+Note: CherryPy is highly configurable, and a lot of its features are somewhat low-level. This is just a demonstration of using it to host our WSGI app without changing a thing.
+
+@split
+
+An example of adding in the popular Beaker session middleware:
+
+@cartouche
+@verbatim
+import jwsgi
+
+app = jwsgi.App()
+
+@app.route("/")
+def index(self, request, response):
+
+	s = request.environ.get('beaker.session')
+	s['test'] = s.get('test', 0) + 1
+	s.save()
+
+	return "<h1>Hello, World!</h1>"
+
+if __name__ == "__main__":
+	from beaker.middleware import SessionMiddleware
+
+	session_opts = {
+		'session.type': 'file',
+		'session.cookie_expires': 300,
+		'session.data_dir': './data',
+		'session.auto': True
+	}
+	wsgi_app = SessionMiddleware(app.wsgi(), session_opts)
+
+	app.run(app=wsgi_app)
+@end verbatim
+@end cartouche

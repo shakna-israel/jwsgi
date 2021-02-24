@@ -1,0 +1,38 @@
+@node Introduction
+@chapter Introduction
+@cindex chapter, Introduction
+
+@split
+
+This document attempts to show how to use the @code{jwsgi} framework for the Python WSGI specification in a helpful manner.
+
+Code will appear in blocks such as:
+
+@cartouche
+@verbatim
+This is some code...
+@end verbatim
+@end cartouche
+
+@split
+
+@emph{WARNING} This document is under active development.
+
+@split
+
+At it's simplest, a program written with @code{jwsgi} will look something like:
+
+@cartouche
+@verbatim
+import jwsgi
+
+app = jwsgi.App()
+
+@app.route("/")
+def index(self, request, response):
+	return "<h1>Hello, World!</h1>"
+
+if __name__ == "__main__":
+	app.run()
+@end verbatim
+@end cartouche

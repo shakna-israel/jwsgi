@@ -1,0 +1,16 @@
+@node Hooks
+@chapter Hooks
+@cindex chapter, Hooks
+@findex jwsgi.App.before_hook
+@findex jwsgi.App.after_hook
+@findex jwsgi.App.error
+
+@split
+
+@code{jwsgi}'s hooks are designed to run hell-or-high-water.
+
+Whilst this can make the execution flow of a program more predictable, it does have a few implications to the overall structure of the program.
+
+@split
+
+@c TODO

@@ -1,0 +1,448 @@
+@node API
+@chapter API
+@cindex chapter, API
+
+@split
+
+Warning: This chapter is a lot more information dense than the other chapters, that tend to include a lot of example code.
+
+Warning: If a class, function or method is not detailed in this chapter, then it is @emph{not} a part of the API, and behaviour cannot be guaranteed.
+
+@split
+
+@findex jwsgi.DictNamespace
+@deffn Class DictNamespace **kwargs
+
+This is a simplistic object that allows you to access the contents by both attribute and by indexing it.
+
+That is, it acts as both a dictionary, and a namespace.
+
+It is a subclass of @code{object}.
+
+It can only be compared to other @code{DictNamespace} objects.
+@end deffn
+
+@split
+
+@findex jwsgi.Template
+@deffn Class Template
+This is the main class constructor used by @code{jwsgi.Response.render_template}.
+
+It is a subclass of @code{string.Formatter}.
+
+For more, @pxref{Templates}.
+@end deffn
+
+@findex jwsgi.Template.format
+@deffn Method Template.format self, format_string, *args, **kwargs
+
+Given a template string, and a series of arguments, returns the resulting template after binding and evaluation.
+
+Performance of this function call is indeterminable as it may call other functions, and may contain recursion.
+@end deffn
+
+@split
+
+@findex jwsgi.environ_defaults
+@deffn Function environ_defaults environ
+Given a dictionary environment, establishes the expected WSGI defaults for our framework. All @code{jwsgi.Request} and @code{jwsgi.Response} objects pass their respective environments through this function.
+
+We extend on the standard WSGI environment keys with:
+
+@itemize
+@item 'jwsgi.version' - A tuple representing the current version of @code{jwsgi} being used.
+@item 'SERVER_SOFTWARE' - We try and follow industry practice for this nonstandard but popular key. The result is a string that should look something like: @code{"jwsgi:0.0.0"}.
+@item 'jwsgi.template_directory' - The template directory to be used by `jwsgi.Response.render_template`.
+@end itemize
+
+Any non-compliance with PEP3333 in this function is to be considered a @code{critical} bug.
+@end deffn
+
+@split
+
+@findex jwsgi.status_code
+@deffn Function status_code code
+Given an integer @code{code}, return the IANA-suggested matching string for the comparable HTTP status code.
+
+For indeterminate codes returns @code{"Unknown"}.
+
+For reserved but unassigned codes, returns @code{"Unassigned"}.
+
+Warning: WSGI is very particular about the status header. Modifying or patching this function takes you into a world of hurt, and is not reccomended.
+@end deffn
+
+@split
+
+@findex jwsgi.Request
+@deffn Class Request environ, secret=None, digestmod=hashlib.sha512
+This is the main class that all @code{request} objects inherits from.
+
+Warning: It is extremely unlikely you'll need to @emph{construct} one of these yourself. If you are... Then make sure you fully understand the implications first.
+@end deffn
+
+@findex jwsgi.Request.__str__
+@deffn Method Request.__str__ self
+Returns a vaguely human-readable representation of the @code{Request} object.
+
+Warning: Nothing about the format of this representation is guaranteed. Just that you have one, so that you can print the damn thing.
+@end deffn
+
+@findex jwsgi.Request.data
+@deffn Method Request.data self
+
+Returns a list of tuples that comprises the content of the @code{Request.json}, @code{Request.form} and @code{Request.query} methods.
+
+This is useful as an all-around lookup on a request when you don't particularly care how the information arrived, so long as it actually did.
+
+Warning: It performs the three lookups for you, and some minor data transformation, so it may have some little performance overhead.
+@end deffn
+
+@findex jwsgi.Request.cookies
+@deffn Method Request.cookies self
+
+Returns a dictionary that matches the keys of Python's `http.cookies.Morsel` object, and contains all cookies that could be successfully parsed out of @code{Request.environ['HTTP_COOKIE']}.
+
+If any of these cookies are secure, and a secret has been set on the @code{jwsgi.App} object, then it attempts to decode them appropriately. It will also attempt to decode that final payload from JSON.
+
+If decoding fails due to security problems, then it returns the value of the cookie intact - it does not attempt to hide it from the programmer. Instead the programmer will receive the encoded data of the form @code{"!@{signature@}?@{encoded_data@}"}.
+
+Warning: Currently all the above decoding, including signature comparison, is done on-demand and uncached. There is a significant overhead to calling it.
+@end deffn
+
+@findex jwsgi.Request.get_cookie
+@deffn Method Request.get_cookie self, name, default=None
+This method attempts to grab the entire cookie object, and not just the value, and return it.
+
+It relies on @code{Request.get_cookies}, and so returns an object of the format used by that method, and implies the same penalties that may apply to that object.
+
+On failure to find the named cookie, it will return the value of @code{default}.
+@end deffn
+
+@findex jwsgi.Request.query
+@deffn Method Request.query self
+This returns an object of the same form as Python's @code{urllib.parse.parse_qs}, based on the content of @code{Request.environ['QUERY_STRING']}.
+@end deffn
+
+@findex jwsgi.Request.body
+@deffn Method Request.body self
+This function attempts to read any data that has been supplied as part of the body of the HTTP request.
+
+Unlike most frameworks that wrongly assume that GET requests are forbidden from including a body, this function may be run against any kind of HTTP method - so long as the server correctly handles it.
+
+The first run of this function is cached in-memory.
+
+Warning: Limits have not yet been implemented for this function:
+
+@itemize
+@item An incorrect Content-Length may cause a socket to hang to timeout.
+@item A large payload may cause memory problems for your application.
+@end itemize
+@end deffn
+
+@findex jwsgi.Request.json
+@deffn Method Request.json self
+This function attempts to parse a JSON response from the HTTP request body. If it fails, then it returns an empty dictionary.
+
+This function will only attempt to parse a JSON response if the Content-Type header is @code{application/json}.
+
+If you are certain, then you can modify @code{Request.environ['CONTENT_TYPE']} to @code{'application/json'} before calling this function to force it to run.
+
+This method relies on and calls @code{Request.body}, and all caveats and limitations apply.
+@end deffn
+
+@findex jwsgi.Request.form
+@deffn Method Request.form self
+This method will attempt to parse data if the Content-Type header is one of:
+
+@itemize
+@item @code{application/x-www-form-urlencoded}
+@item @code{multipart/form-data}
+@end itemize
+
+If it fails, it will return an empty list.
+
+For @code{application/x-www-form-urlencoded}, it supplies data in the same form as Python's @code{urllib.parse.parse_qsl}.
+
+For @code{multipart/form-data}, it supplies data in the same form as a list of dictionary values with the keys:
+
+@itemize
+@item @code{name} - Guaranteed to exist.
+@item @code{filename} - May be @code{None} or @code{str}.
+@item @code{content} - The decoded payload.
+@end itemize
+@end deffn
+
+@findex jwsgi.Request.uri
+@deffn Method Request.uri self
+Attempts to supply a complete URI with the object form given by Python's @code{urllib.parse.urlparse}.
+@end deffn
+
+@vindex jwsgi.Request.environ
+@deffn Attribute Request.environ
+This is a safely modifiable attribute of the @code{Request} object, that contains the WSGI environment.
+@end deffn
+
+@vindex jwsgi.Request.secret
+@deffn Attribute Request.secret
+This cannot safely be modified, but should contain a copy of the secret given to the @code{jwsgi.App} object.
+
+If you wish to break all secure cookies, mess with it.
+@end deffn
+
+@vindex jwsgi.Request.digestmod
+@deffn Attribute Request.digestmod
+This cannot safely be modified, but should contain a copy of the digestmod given to the @code{jwsgi.App} object.
+
+If you wish to break all secure cookies, mess with it.
+@end deffn
+
+@split
+
+@findex jwsgi.Response
+@deffn Class Response self, environ, secret=None, digestmod=hashlib.sha512
+This is the main class that all @code{response} objects inherits from.
+
+Warning: It is extremely unlikely you'll need to @emph{construct} one of these yourself. If you are... Then make sure you fully understand the implications first.
+@end deffn
+
+@findex jwsgi.Response.__str__
+@deffn Method Response.__str__ self
+Returns a vaguely human-readable representation of the @code{Response} object.
+
+Warning: Nothing about the format of this representation is guaranteed. Just that you have one, so that you can print the damn thing.
+@end deffn
+
+@findex jwsgi.Response.headers
+@deffn Method jwsgi.Response.headers self
+When called, this reconstructs the appropriate headers object to hand to the @code{start_response} of a WSGI server.
+@end deffn
+
+@findex jwsgi.Response.get_header
+@deffn Method Response.get_header self, key, default=None
+This function allows you to introspect against a HTTP header currently stored in the response object.
+
+The return value may be a single value, or an iterable if it exists.
+
+If it doesn't, then @code{default} is returned.
+@end deffn
+
+@findex jwsgi.Response.set_header
+@deffn Method Response.set_header self, key, value
+This function overwrites any existing header/s with the @code{value}.
+
+For more advanced uses, see @code{Response.environ}.
+
+Warning: If used on a multi-header, it will replace all instances.
+@end deffn
+
+@findex jwsgi.Response.append_header
+@deffn Method Response.append_header self, key, value
+This function will either set a header if it does not yet exist, or set a new copy of the HTTP header, allowing you to create multi-headers in a safe manner.
+
+For more advanced uses, see @code{Response.environ}.
+@end deffn
+
+@findex jwsgi.Response.set_cookie
+@deffn Method Response.set_cookie self, name, value, **options
+This function allows you to create a Set-Cookie header safely on your response object.
+
+The @code{options} contains values that would be expected be handed to Python's @code{http.cookies.SimpleCookie}.
+
+If the option @code{'secure'} is supplied, but @code{jwsgi.App.secret} was not set, raised @code{http.cookies.CookieError}.
+
+If the option @code{'secure'} is supplied, the @code{value} may be a string, bytestring, or any JSON-dumpable object. The resulting cookie is secured with HMAC against modification, but is clearly inspectable and takes the form of: @code{"!@{signature@}?@{encoded_data@}"}.
+
+If the option @code{'secure'} is supplied and the @code{'maxage'} is not, then the maximum age is set to @code{24 * 3600} seconds.
+
+If for any reason the data cannot fit inside a cookie, then a @code{ValueError} is raised.
+@end deffn
+
+@findex jwsgi.Response.del_cookie
+@deffn Method Response.del_cookie self, key, **kwargs
+Politely ask for the deletion of a given cookie.
+
+@emph{Warning}: The @code{domain} and @code{path} values must be the same as when the cookie was set for this to have any effect whatsoever. That's the way cookies work.
+
+@cindex footgun, Deleting cookies.
+@end deffn
+
+@findex jwsgi.Response.redirect
+@deffn Method Response.redirect self path
+Given a string path, such as returned by @code{jwsgi.App.get_paths}, create a HTTP 303 redirect to that path.
+
+Note: Before, After, and Error Hooks will still run regardless. They won't be affected by the call to redirect.
+
+Warning: When using this function, it should be the @code{return} value of a routing function.
+
+@cindex footgun, HTTP Redirects
+@end deffn
+
+@findex jwsgi.Response.set_content_type
+@deffn Method Response.set_content_type self, content_type
+Set the Content-Type of the response.
+@end deffn
+
+@findex jwsgi.Response.set_content_encoding
+@deffn Method Response.set_content_encoding self, content_encoding
+Set the Content-Encoding of the response.
+
+@emph{Warning}: This has wide and far reaching consequences and should only ever be called at the start of a response, or you risk having multiple encodings in your output.
+@end deffn
+
+@findex jwsgi.Response.render_template
+@deffn Method Response.render_template self, filename, **kwargs
+
+Given a filename and a series of bindings, attempt to return a rendered string containing the contents.
+
+Files are looked up from inside @code{Response.environ['jwsgi.template_directory']}.
+
+This relies on @code{jwsgi.Template.format} for the syntax of the file, and the implications thereof. (For more, @pxref{Templates}.)
+
+Additionally, if the key is not in use, it sets:
+
+@itemize
+@item @code{__FILE__} for the filename of the template.
+@item @code{include} as a function to include one template in the body of another, binding to the same environment.
+	@itemize
+	@item An included file sets its own @code{__FILE__}
+	@item Additionally, an included file sets @code{_PARENT_FILE_} to the @code{__FILE__} of its parent environment.
+	@end itemize
+@end itemize
+@end deffn
+
+@vindex jwsgi.Response.environ
+@deffn Attribute Response.environ
+This is a safely modifiable attribute of the @code{Response} object, that contains the WSGI environment.
+@end deffn
+
+@vindex jwsgi.Response.secret
+@deffn Attribute Response.secret
+This cannot safely be modified, but should contain a copy of the secret given to the @code{jwsgi.App} object.
+
+If you wish to break all secure cookies, mess with it.
+@end deffn
+
+@vindex jwsgi.Response.digestmod
+@deffn Attribute Response.digestmod
+This cannot safely be modified, but should contain a copy of the digestmod given to the @code{jwsgi.App} object.
+
+If you wish to break all secure cookies, mess with it.
+@end deffn
+
+@split
+
+@findex jwsgi.App
+@deffn Class jwsagi.App self, secret=None, digestmod=hashlib.sha512
+This is the main class object of the framework.
+
+Almost all pieces of code will start by definining an instance of this object.
+
+It is @emph{highly} reccommended that you set the @code{secret} value to something secure, such as the output of Python's @code{secrets.token_urlsafe}. If this value changes, then decoding any sent secure cookies will fail.
+@end deffn
+
+@findex jwsgi.App.add_type_constructor
+@deffn Method App.add_type_constructor self, name, fn
+This function allows you to set a custom type specifier for the value of a route.
+
+For example:
+
+@cartouche
+@verbatim
+def new_constructor(value):
+	return int(value)
+app.add_type_constructor("constructor", new_constructor)
+
+@app.route("/{thing:constructor}")
+@end verbatim
+@end cartouche
+
+For more, @pxref{Routing}.
+@end deffn
+
+@findex jwsgi.App.hook_before
+@deffn Decorator App.hook_before self, func
+This decorator allows you to add a hook that is processed @emph{before} the relevant routing function is called.
+
+The function hooked is expected to take the same form as a normal routing function:
+
+@cartouche
+@verbatim
+@app.hook_before()
+def before(self, request, response):
+	pass
+@end verbatim
+@end cartouche
+
+@emph{Warning}: The @code{self} object may be @code{None}.
+@end deffn
+
+@findex jwsgi.App.hook_after
+@deffn Decorator App.hook_after self, func
+This decorator allows you to add a hook that is processed @emph{after} the relevant routing function is called, but @emph{before} any error hooks are run.
+
+The function hooked is expected to take the same form as a normal routing function:
+
+@cartouche
+@verbatim
+@app.hook_after()
+def before(self, request, response):
+	pass
+@end verbatim
+@end cartouche
+
+@emph{Warning}: The @code{self} object may be @code{None}.
+@end deffn
+
+@findex jwsgi.App.error
+@deffn Decorator App.error self, code, func
+This decorator allows you to hook the response when a HTTP error is hit during the processing of your application.
+
+It is run @emph{after} all other hooks.
+
+The function hooked is expected to take the same form as a normal routing function:
+
+@cartouche
+@verbatim
+@app.error(404)
+def before(self, request, response):
+	pass
+@end verbatim
+@end cartouche
+
+@emph{Warning}: The @code{self} object may be @code{None}.
+@end deffn
+
+@findex jwsgi.App.route
+@deffn Method App.route self, path_string, methods=['GET', 'HEAD', 'OPTIONS']
+
+This function allows you to install a route inside your application.
+
+For more, @pxref{Routing}.
+@end deffn
+
+@findex jwsgi.App.get_paths
+@deffn Method App.get_paths self, functor, methods=['GET']
+
+The value of @code{funtor} may be an actual function, or the string representation of the function name.
+
+This will attempt to return a list of all relevant routing strings for that particular function, (which may be passed to Python's @code{format} to finish construction if there are dynamic parts).
+@end deffn
+
+@findex jwsgi.App.run
+@deffn Method App.run self, host='localhost', port=8080, server=None, app=None
+
+If no @code{app} is supplied, defaults to the return of @code{App.wsgi}.
+
+If @code{server} is not supplied, defaults to Python's @code{wsgiref.make_server}.
+
+Attempts to run your application using a development server.
+
+@emph{Warning}: Do not run your application in production this way. Use a proper WSGI server and it's appropriate method for accessing the return of @code{App.wsgi}.
+
+@cindex footgun, App.run is inappropriate for production
+@end deffn
+
+@findex jwsgi.App.wsgi
+@deffn Method App.wsgi self
+Verifies and returns a WSGI compliant version of your application.
+@end deffn

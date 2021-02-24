@@ -1,0 +1,4 @@
+@node Changelog
+@chapter Changelog
+@cindex chapter, Changelog
+

@@ -1,0 +1,155 @@
+\input texinfo
+@documentencoding UTF-8
+@frenchspacing on
+@settitle jwsgi
+@afourlatex
+
+@documentdescription
+A WSGI Framework for Python
+@end documentdescription
+
+@copying
+Copyright @copyright{} 2020, James Milne.
+
+Although the author made his best efforts preparing this document, he assumes no responsibility for errors or omissions, or for any damage that may result from the use of the information presented here. All product names mentioned in this book are trademarks of their respective owners, no approval or endorsement of the software is implied by any respective rights holder.
+
+Permission is granted to copy, distribute and/or modify this document under the terms of the GNU Free Documentation License, Version 1.3 or any later version published by the Free Software Foundation; with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts. A copy of the license is included @pxref{Manual License}.
+@end copying
+
+@titlepage
+@title jwsgi
+@subtitle A WSGI Framework for Python
+@author James Milne
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@contents
+
+@headings off
+@evenheading @thischaptername @| @| @thispage
+@oddheading @thispage @| @| @thischaptername
+@evenfooting @| @thispage @|
+@oddfooting @| @thischapternum @|
+@setchapternewpage odd
+@xrefautomaticsectiontitle on
+
+@node Top
+
+@macro split
+@sp 2
+@center --- --- ---
+@sp 2
+@end macro
+
+@macro funcsection{name}
+@section \name\
+@findex \name\
+@end macro
+
+@node content
+
+@ifhtml
+@html
+<style>
+body{
+  margin:40px auto;
+  max-width: 700px;
+  max-width:70vw;
+  line-height:1.6;
+  font-size:18px;
+  color:#444;
+  padding:0 10px;
+  overflow-x: hidden;
+}
+
+@@margin(max-width: 45em) {
+	body {
+		max-width: 90vw;
+	}
+}
+
+.verbatim {
+  overflow-x: visible;
+}
+
+.cartouche {
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 0.5em;
+}
+
+h1,h2,h3{line-height:1.2}
+
+.anchor {
+  font-size: 0.5em;
+}
+</style>
+
+<script>
+window.addEventListener("load", function() {
+  var els = document.querySelectorAll('*[id]');
+  for(var i = 0; i < els.length; i++) {
+    var el = els[i];
+    var text = el.textContent;
+    if(el.textContent.length < 1) {
+      if(!el.id.startsWith("index-")) {
+        var inner = document.createElement('a');
+        inner.textContent = '\u2693';
+        inner.href = '#' + el.id;
+        inner.classList.add("anchor"); 
+        el.appendChild(inner);
+      }
+    }
+  }
+})
+</script>
+@end html
+@end ifhtml
+
+@ifhtml
+@html
+<article>
+@end html
+@end ifhtml
+
+@include Introduction.texi
+@split
+@include ManualLicense.texi
+@split
+@include WSGI.texi
+@split
+@include Routing.texi
+@split
+@include Templates.texi
+@split
+@include Cookies.texi
+@split
+@include Hooks.texi
+@split
+@include API.texi
+@split
+
+@ifhtml
+@html
+</article>
+@end html
+@end ifhtml
+
+@include Changelog.texi
+@split
+
+@node Index
+@unnumbered Index
+
+@unnumberedsec Concepts
+@printindex cp
+
+@unnumberedsec Variables
+@printindex vr
+
+@unnumberedsec Functions
+@printindex fn
+
+@bye

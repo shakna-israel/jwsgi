@@ -15,9 +15,6 @@ import shlex
 import base64
 import hmac
 
-import traceback
-import sys
-
 class Template(string.Formatter):
 	def format(self, format_string, *args, **kwargs):
 		# Expose arguments...
@@ -37,6 +34,7 @@ class Template(string.Formatter):
 			if type(value) is dict:
 				value = value.items()
 			return ''.join([Template().format(template, item=item, idx=idx) for idx, item in enumerate(value)])
+		# TODO: <for:BIND:var:>
 		elif spec == '!' or spec == '()':
 			return value()
 		elif spec.startswith("(") and spec.endswith(')'):
@@ -253,7 +251,7 @@ def environ_defaults(environ):
 
 	# Our own server values...
 	environ['jwsgi.version'] = (0, 0, 0)
-	environ['SERVER_SOFTWARE'] = 'jwsgi:{}'.format(environ['jwsgi.version'])
+	environ['SERVER_SOFTWARE'] = 'jwsgi:{}'.format('.'.join(environ['jwsgi.version']))
 	environ['jwsgi.template_directory'] = 'templates'
 
 	return environ
@@ -389,7 +387,10 @@ class DictNamespace(object):
 			return False
 
 	def __getitem__(self, item):
-		return getattr(self.datum, item)
+		try:
+			return getattr(self.datum, item)
+		except AttributeError:
+			raise KeyError
 
 class Request(object):
 	def __init__(self, environ, secret=None, digestmod=hashlib.sha512):
@@ -601,7 +602,7 @@ class Response(object):
 		return headers
 
 	def get_header(self, key, default=None):
-		return self.environ['HTTP_{}'.format(key)] or default
+		return self.environ.get('HTTP_{}'.format(key), default)
 
 	def set_header(self, key, value):
 		self.environ['HTTP_{}'.format(key)] = value
@@ -748,6 +749,8 @@ class App(object):
 		self.secret = secret
 		self.digestmod = digestmod
 
+		# TODO: Allow overriding response.environ['jwsgi.template_directory']...
+
 	def add_type_constructor(self, name, fn):
 		self.type_constructors[name] = fn
 
@@ -847,13 +850,17 @@ class App(object):
 					r.append(k)
 		return r
 
-	def run(self, host='localhost', port=8080, server=None):
+	def run(self, host='localhost', port=8080, server=None, app=None):
 		"""
 		Start up a development server.
 		"""
+
+		if app == None:
+			app = self.wsgi()
+
 		if server == None:
 			from wsgiref.simple_server import make_server
-			with make_server(host, port, self.wsgi()) as httpd:
+			with make_server(host, port, app) as httpd:
 				print("WARNING: Using wsgiref's shitty server!")
 				print("Running at http://{}:{}".format(host, port))
 				httpd.serve_forever()
@@ -928,7 +935,6 @@ class App(object):
 								return RouteObject
 
 	def wsgi(self):
-		# TODO: We're supposed to catch our own exceptions here...
 		def app(environ, start_response):
 			environ = environ_defaults(environ)
 
@@ -965,10 +971,12 @@ class App(object):
 					# Run main route...
 					body = route.fn(route, request, response)
 			except Exception as e:
-				# TODO:
-				print("Exception", e)
-				traceback.print_stack()
-				print(sys.exc_info())
+				# TODO: Debug mode...
+				#print("Exception", e)
+				#import traceback
+				#import sys
+				#traceback.print_stack()
+				#print(sys.exc_info())
 
 				if isinstance(e, TypeError):
 					# User violated type specifier on route...

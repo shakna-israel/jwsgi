@@ -1,0 +1,116 @@
+@node Routing
+@chapter Routing
+@cindex chapter, Routing
+@findex jwsgi.App.route
+
+@split
+
+One of the most key parts of any web framework is how it allows you to route requests, either statically, or dynamically, and the implications thereof.
+
+@code{jwsgi} has taken a slightly, very slightly, differing approach to routing that you has some benefits, and some drawbacks.
+
+It is opinionated, but unlikely to change anytime soon.
+
+@split
+
+All routes are created with @code{jwsgi.App.route}, for example:
+
+@cartouche
+@verbatim
+import jwsgi
+
+app = jwsgi.App()
+
+@app.route("/")
+def index(self, request, response):
+	return "<h1>Hello, World!</h1>"
+@end verbatim
+@end cartouche
+
+This is an example of a @emph{static} route as there are no dynamic parts.
+
+So, we'll take a look at a dynamic route that will allow us to change the content of the page:
+
+@cartouche
+@verbatim
+import jwsgi
+
+app = jwsgi.App()
+
+@app.route("/hello/{name}")
+@app.route("/hello")
+def index(self, request, response):
+	try:
+		name = self['name']
+	except KeyError:
+		name = "World"
+
+	return "<h1>Hello, {}!</h1>".format(name)
+@end verbatim
+@end cartouche
+
+There's a few really important things that pop up here:
+
+@itemize
+@item The routing URL takes the same form as a Python format string. That is because the dynamic part is in fact powered by Python's format string system. We'll see why that can be useful in a bit.
+@item You can have multiple routes pointing to the same function - but if you do, then the key you're looking for may/may not exist, and it is up to you to handle that in a Pythonic fashion. It won't magically become @code{None}.
+@item Dynamic parts of the URL attach to the @code{self} argument of a route function. They are not implicitly created for you, nor are they attached to the @code{request} object.
+@end itemize
+
+@split
+
+@emph{WARNING:} There is a surprising footgun in the routing string.
+
+You may only have one dynamic, and arbitrary static, parts between the path seperator in the URI.
+
+That is, these are all okay:
+
+@cartouche
+@verbatim
+@app.route("/{hello}/{world}")
+@app.route("/{hello}/{world}.mp4")
+@app.route("/{hello}/movie.mp4")
+@app.route("/{hello}again/{world}.mp4")
+@end verbatim
+@end cartouche
+
+But this is not:
+
+@cartouche
+@verbatim
+@app.route("/{dynamic}.{part}")
+@end verbatim
+@end cartouche
+
+@cindex footgun, URI format string.
+
+@split
+
+Handling methods is also a critical part of any routing infrastructure.
+
+@emph{WARNING:} You can only have one route per exact URI format string. This means that you can only attach one function to the URI @code{/hello}, even if you want to handle methods differently. You'll need to accept multiple efforts, and reroute based on the received method yourself.
+
+@cindex footgun, URI format string.
+
+HTTP Methods are passed to the routing decorator, and the current method can be found in @code{request.environ['REQUEST_METHOD']}:
+
+@cartouche
+@verbatim
+@app.route("/", methods=['GET', 'POST'])
+def index(self, request, response):
+	if request.environ['REQUEST_METHOD'] == 'GET':
+		return "<h1>Handle GET method here.</h1>"
+	else request.environ['REQUEST_METHOD'] == 'POST':
+		return "<h1>Handle POST method here.</h1>"
+@end verbatim
+@end cartouche
+
+You can access the list of acceptable methods from @code{self['methods']}. This is the total list - allowing you to introspect for if you generated your routing information dynamically.
+
+@emph{WARNING}: If you specified the GET method anywhere, or didn't specify a method, then you automatically imply the HEAD and OPTIONS methods as well - which you may want to handle differently for CORS preflight requests.
+
+@cindex footgun, GET, HEAD, OPTIONS
+
+@split
+
+@c TODO: Routing specifiers...

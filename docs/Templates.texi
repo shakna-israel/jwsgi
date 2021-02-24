@@ -1,0 +1,14 @@
+@node Templates
+@chapter Templates
+@cindex chapter, Templates
+@findex jwsgi.Response.render_template
+
+@split
+
+Whilst this chapter is devoted to @code{jwsgi}'s template engine, and whilst we include one, it is likely that you may want to reach for a more professional engine such as @code{Jinja2} or @code{mustache}.
+
+The template engine included is very barebones and is only really suited to very small projects.
+
+@split
+
+@c TODO

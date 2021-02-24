@@ -1,0 +1,17 @@
+@node Cookies
+@chapter Cookies
+@cindex chapter, Cookies
+@findex jwsgi.Request.cookies
+@findex jwsgi.Request.get_cookie
+@findex jwsgi.Response.set_cookie
+@findex jwsgi.Response.del_cookie
+
+@split
+
+Cookies can be somewhat difficult to handle if you are inexperienced with them.
+
+Hopefully the divide between getting them from the @code{Request} object and setting them with the @code{Response} object will lead to a more intuitive understanding of how cookies work in practice.
+
+@split
+
+@c TODO: Examples of using cookies in all kinds of ways.
