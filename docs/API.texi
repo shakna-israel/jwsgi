@@ -213,7 +213,7 @@ Warning: Nothing about the format of this representation is guaranteed. Just tha
 @end deffn
 
 @findex jwsgi.Response.headers
-@deffn Method jwsgi.Response.headers self
+@deffn Method Response.headers self
 When called, this reconstructs the appropriate headers object to hand to the @code{start_response} of a WSGI server.
 @end deffn
 
