@@ -11,4 +11,60 @@ The template engine included is very barebones and is only really suited to very
 
 @split
 
-@c TODO
+@section Syntax
+
+The syntax of the simple template engine is extremely similar to Python's format-strings - it inherits from them. There are however some key differences:
+
++ Specifiers won't work.
+
++ Certain sequences are expected to work certain ways.
+
+To make it more clear, here is an example of a template in use:
+
+@cartouche
+@verbatim
+My name is {foo:(name, last)}
+
+And without arguments: {foo:!} or {foo:()}
+
+<ul>
+{foreach: books:
+	<li>"{{item[1]}}" by {{item[0]}}</li>
+}
+</ul>
+
+<ul>
+{foridx: books:
+	<li>"{{item[1]}}" by {{item[0]}} (Num: {{idx}})</li>
+}
+</ul>
+
+{if: rockit:
+<p>ROCK IT!</p>
+	:
+<p>Don't rock it.</p>
+}
+
+{if: rockit:
+<p>ROCK IT! Without an else!</p>
+}
+
+<p>My filename is {_FILE_}</p>
+
+{include:("include.tpl")}
+@end verbatim
+@end cartouche
+
+@emph{Warning}: There are a @emph{lot} of quirks to this engine, and if you find yourself struggling, it is time to reach for one of those professional engines and use them instead of wasting your time trying to make our engine work.
+
+Some of the quirks are:
+
+@itemize
+@item The arguments handed to a function call are passed similiar to shell-escaping, not Python. This has large implications for the way you quote arguments.
+@item The left-hand of the value passed to @code{if}, @code{foreach} and @code{foridx} is whitespace-stripped, but not the right.
+@item Double-braced items may be expanded @emph{before} the caller, which may impact how they appear.
+@item The number of braces you need to use directly corresponds to how nested you are, which may be exceptionally confusing.
+@item The output may include undesirable whitespace, unless you reduce readability.
+@item It is possible to introduce unexpected recursion bugs. Easily.
+@item You may find it impossible to escape the @code{:} character.
+@end itemize
