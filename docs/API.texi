@@ -378,7 +378,7 @@ def before(self, request, response):
 
 @findex jwsgi.App.hook_after
 @deffn Decorator App.hook_after self, func
-This decorator allows you to add a hook that is processed @emph{after} the relevant routing function is called, but @emph{before} any error hooks are run.
+This decorator allows you to add a hook that is processed @emph{after} the relevant routing function is called, and @emph{after} any error hooks are run.
 
 The function hooked is expected to take the same form as a normal routing function:
 
@@ -390,6 +390,8 @@ def before(self, request, response):
 @end verbatim
 @end cartouche
 
+The @code{response} should, in most cases, have an attribute called @code{body}, that is the HTTP body of the response to be sent.
+
 @emph{Warning}: The @code{self} object may be @code{None}.
 @end deffn
 
@@ -397,7 +399,7 @@ def before(self, request, response):
 @deffn Decorator App.error self, code, func
 This decorator allows you to hook the response when a HTTP error is hit during the processing of your application.
 
-It is run @emph{after} all other hooks.
+It is run @emph{after} the before hooks, but @emph{before} the after hooks.
 
 The function hooked is expected to take the same form as a normal routing function:
 

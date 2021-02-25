@@ -146,7 +146,7 @@ def environ_defaults(environ):
 		# Fallback to default...
 		raise KeyError
 	except KeyError:
-		# TODO: This is insane. Calculate it, if we can.
+		# This can't be calculated. The only safe answer is this.
 		environ['CONTENT_LENGTH'] = 0
 
 	# When HTTP_HOST is not set, these variables can be combined to determine a default.
@@ -977,6 +977,7 @@ class App(object):
 				#import sys
 				#traceback.print_stack()
 				#print(sys.exc_info())
+				# Should it go to environ['wsgi.errors']?
 
 				if isinstance(e, TypeError):
 					# User violated type specifier on route...
@@ -1017,6 +1018,10 @@ class App(object):
 			# Run after hooks...
 			for item in self._hook_after:
 				item(route, request, response)
+				# Get the body from the hook...
+				body = response.body
+			
+			body = response.body
 
 			# Generate the status
 			status = '{} {}'.format(code, status_code(code))
