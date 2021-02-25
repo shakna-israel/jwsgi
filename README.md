@@ -4,6 +4,34 @@ A WSGI Framework for Python
 
 ---
 
+## A Taste
+
+	import jwsgi
+
+	app = jwsgi.App()
+
+	@app.route("/")
+	@app.route("/{name:str}")
+	def index(self, request, response):
+		try:
+			name = self['name']
+		except KeyError:
+			name = "World"
+
+		return "<h1>Hello, {name}!</h1>".format(name=name)
+
+	@app.route("/data")
+	def data_route(self, request, response):
+		return {
+			"datum": [1, 2, 3, 4],
+			"another": "Some info..."
+		}
+
+	if __name__ == "__main__":
+		app.run()
+
+---
+
 ## Documentation
 
 The documentation is generated with TeXInfo, and the supplied `Makefile` can help you create a manual as:
@@ -38,9 +66,9 @@ It supports non-user interactions, and plain-text email.
 
 ## Installation
 
-There is currently no `setup.py` as `jwsgi` is still undergoing breaking changes.
+There is a minimal `setup.py` but no currently published PyPI package.
 
-However, it is a 0-dependency Python library, so you can simply copy it to the appropriate place for importing into your project.
+However, it is a 0-dependency Python library, so you can simply copy `jwsgi.py` to the appropriate place for importing into your project instead.
 
 ---
 

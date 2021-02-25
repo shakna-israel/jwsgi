@@ -1,3 +1,10 @@
+"""A WSGI Framework for Python
+
+jwsgi is a WSGI framework designed to be simple, predictable, but practical.
+
+See more [here](https://git.sr.ht/~shakna/jwsgi).
+"""
+
 import io
 import functools
 import urllib.parse
@@ -14,6 +21,8 @@ import datetime
 import shlex
 import base64
 import hmac
+
+version = (0, 1, 0)
 
 class Template(string.Formatter):
 	def format(self, format_string, *args, **kwargs):
@@ -250,7 +259,7 @@ def environ_defaults(environ):
 		environ['wsgi.run_once'] = False
 
 	# Our own server values...
-	environ['jwsgi.version'] = (0, 0, 0)
+	environ['jwsgi.version'] = version
 	environ['SERVER_SOFTWARE'] = 'jwsgi:{}'.format('.'.join(environ['jwsgi.version']))
 	environ['jwsgi.template_directory'] = 'templates'
 
