@@ -28,6 +28,14 @@ You can see some hopefully up to date copies of the manual at:
 
 ---
 
+## Issues
+
+The issue tracker is [here](https://todo.sr.ht/~shakna/jwsgi).
+
+It supports non-user interactions, and plain-text email.
+
+---
+
 ## Installation
 
 There is currently no `setup.py` as `jwsgi` is still undergoing breaking changes.
