@@ -9,7 +9,7 @@ if sys.version_info < (3, 6):
 import jwsgi
 
 setup(name='jwsgi',
-	version=jwsgi.version,
+	version='.'.join(jwsgi.version),
 	description=jwsgi.__doc__.split("\n")[0],
 	long_description=jwsgi.__doc__,
 	long_description_content_type="text/markdown",
