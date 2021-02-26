@@ -294,7 +294,7 @@ Set the Content-Encoding of the response.
 
 Given a filename and a series of bindings, attempt to return a rendered string containing the contents.
 
-Files are looked up from inside @code{Response.environ['jwsgi.template_directory']}.
+Files are looked up from inside @code{Response.environ['jwsgi.template_directory']}. (Which is usually set on creation of @code{jwsgi.App}).
 
 This relies on @code{jwsgi.Template.format} for the syntax of the file, and the implications thereof. (For more, @pxref{Templates}.)
 
@@ -308,6 +308,8 @@ Additionally, if the key is not in use, it sets:
 	@item Additionally, an included file sets @code{_PARENT_FILE_} to the @code{__FILE__} of its parent environment.
 	@end itemize
 @end itemize
+
+Finally, if the template file in question either does not exist, or does not exist inside the given template directory, it raises a HTTP 502 Bad Gateway error.
 @end deffn
 
 @vindex jwsgi.Response.environ
@@ -332,13 +334,15 @@ If you wish to break all secure cookies, mess with it.
 @split
 
 @findex jwsgi.App
-@deffn Class jwsagi.App self, secret=None, digestmod=hashlib.sha512
+@deffn Class App self, secret=None, digestmod=hashlib.sha512, template_directory=None
 This is the main class object of the framework.
 
 Almost all pieces of code will start by definining an instance of this object.
 
 It is @emph{highly} reccommended that you set the @code{secret} value to something secure, such as the output of Python's @code{secrets.token_urlsafe}. If this value changes, then decoding any sent secure cookies will fail.
 @end deffn
+
+If @code{template_directory} is set, then @code{environ['jwsgi.template_directory']} will be modified to point to the same location for every request & response.
 
 @findex jwsgi.App.add_type_constructor
 @deffn Method App.add_type_constructor self, name, fn
@@ -418,6 +422,18 @@ def before(self, request, response):
 @deffn Method App.route self, path_string, methods=['GET', 'HEAD', 'OPTIONS']
 
 This function allows you to install a route inside your application.
+
+The @code{path_string} is somewhat reminiscient of a Python format string, with some caveats applying.
+
+Routes are expected to take the form of: @code{function(self, request, response)}, and may return a large number of types which will be attempted to be handled in the following ways:
+
+@itemize
+@item Python @code{str} - This will be encoded with @code{response.environ['CONTENT_ENCODING']}. If no @code{response.environ['CONTENT_TYPE']} has been set, assumes @code{text/html}.
+@item Python @code{byte} - This is returned as-is. If no @code{response.environ['CONTENT_TYPE']} has been set, assumes @code{text/plain}.
+@item Python @code{dict} - This is attempted to be dumped as JSON, encoded with @code{response.environ['CONTENT_ENCODING']}. Additionally if no @code{response.environ['CONTENT_TYPE']} has been set, assumes @code{application/json}.
+@item Python @code{list} - This is attempted to be dumped as JSON, encoded with @code{response.environ['CONTENT_ENCODING']}. Additionally if no @code{response.environ['CONTENT_TYPE']} has been set, assumes @code{application/json}.
+@item Otherwise it fallsback to trying to encode the data with @code{response.environ['CONTENT_ENCODING']}, and if no @code{response.environ['CONTENT_TYPE']} has been set, assumes @code{application/octet-stream}.
+@end itemize
 
 For more, @pxref{Routing}.
 @end deffn

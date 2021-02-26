@@ -46,7 +46,7 @@ import shlex
 import base64
 import hmac
 
-version = (0, 1, 0)
+version = (0, 2, 0, 'dev')
 
 class Template(string.Formatter):
 	def format(self, format_string, *args, **kwargs):
@@ -285,7 +285,11 @@ def environ_defaults(environ):
 	# Our own server values...
 	environ['jwsgi.version'] = version
 	environ['SERVER_SOFTWARE'] = 'jwsgi:{}'.format('.'.join(environ['jwsgi.version']))
-	environ['jwsgi.template_directory'] = 'templates'
+
+	try:
+		environ['jwsgi.template_directory']
+	except KeyError:
+		environ['jwsgi.template_directory'] = 'templates'
 
 	return environ
 
@@ -765,15 +769,17 @@ class Response(object):
 			kwargs['include'] = inner_include
 
 		p = root / pathlib.Path(filename)
-		if p.exists():
+		if p.exists() and root in p.parents:
 			with open(p, 'r') as openFile:
 				return Template().format(openFile.read(), **kwargs)
+		else:
+			return 502
 
 	def __str__(self):
 		return "Response({})".format(str(self.environ))
 
 class App(object):
-	def __init__(self, secret=None, digestmod=hashlib.sha512):
+	def __init__(self, secret=None, digestmod=hashlib.sha512, template_directory=None):
 		self.routes = {}
 		self.error_routes = {}
 		self.type_constructors = {}
@@ -781,8 +787,7 @@ class App(object):
 		self._hook_after = []
 		self.secret = secret
 		self.digestmod = digestmod
-
-		# TODO: Allow overriding response.environ['jwsgi.template_directory']...
+		self.template_directory=template_directory
 
 	def add_type_constructor(self, name, fn):
 		self.type_constructors[name] = fn
@@ -969,6 +974,10 @@ class App(object):
 
 	def wsgi(self):
 		def app(environ, start_response):
+			# Override the template directory if one was set...
+			if self.template_directory != None:
+				environ['jwsgi.template_directory'] = self.template_directory
+
 			environ = environ_defaults(environ)
 
 			# Default status code...
@@ -1036,6 +1045,11 @@ class App(object):
 			except ValueError:
 				code = 500
 				response.environ['HTTP_STATUS'] = code
+
+			# Check if an integer was returned instead...
+			if isinstance(body, int):
+				response.environ['HTTP_STATUS'] = body
+				body = b''
 
 			# Check for errors...
 			if response.environ['HTTP_STATUS'] in self.error_routes:
