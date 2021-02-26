@@ -2,6 +2,30 @@
 
 jwsgi is a WSGI framework designed to be simple, predictable, but practical.
 
+	import jwsgi
+
+	app = jwsgi.App()
+
+	@app.route("/")
+	@app.route("/{name:str}")
+	def index(self, request, response):
+		try:
+			name = self['name']
+		except KeyError:
+			name = "World"
+
+		return "<h1>Hello, {name}!</h1>".format(name=name)
+
+	@app.route("/data")
+	def data_route(self, request, response):
+		return {
+			"datum": [1, 2, 3, 4],
+			"another": "Some info..."
+		}
+
+	if __name__ == "__main__":
+		app.run()
+
 See more [here](https://git.sr.ht/~shakna/jwsgi).
 """
 
