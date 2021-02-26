@@ -284,7 +284,7 @@ def environ_defaults(environ):
 
 	# Our own server values...
 	environ['jwsgi.version'] = version
-	environ['SERVER_SOFTWARE'] = 'jwsgi:{}'.format('.'.join(environ['jwsgi.version']))
+	environ['SERVER_SOFTWARE'] = 'jwsgi:{}'.format('.'.join([str(x) for x in environ['jwsgi.version']]))
 
 	try:
 		environ['jwsgi.template_directory']
