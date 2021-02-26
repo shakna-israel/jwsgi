@@ -761,7 +761,7 @@ class Response(object):
 					inner_dict['_FILE_'] = fname
 
 				p = root / pathlib.Path(fname)
-				if p.exists():
+				if p.exists() and root in p.parents:
 					with open(p, 'r') as openFile:
 						return Template().format(openFile.read(), **inner_dict)
 
