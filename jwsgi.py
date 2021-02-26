@@ -839,6 +839,17 @@ class App(object):
 
 		return error_route_inner
 
+	def template(self, filename):
+		"""
+		Wrap function with a template file.
+		"""
+		def template_inner(func):
+			@functools.wraps(func)
+			def wrapper(func_self, request, response):
+				return response.render_template(filename, **func(func_self, request, response))
+			return wrapper
+		return template_inner
+
 	def route(self, path_string, methods=['GET', 'HEAD', 'OPTIONS']):
 		"""
 		Install a function to be called for a given path,

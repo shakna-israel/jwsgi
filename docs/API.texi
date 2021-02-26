@@ -418,6 +418,11 @@ def before(self, request, response):
 @emph{Warning}: The @code{self} object may be @code{None}.
 @end deffn
 
+@findex jwsgi.App.template
+@deffn Decorator App.template self filename
+Wrap a given route such that the returned dictionary is passed to @code{response.render_template} with the given @code{filename}.
+@end deffn
+
 @findex jwsgi.App.route
 @deffn Method App.route self, path_string, methods=['GET', 'HEAD', 'OPTIONS']
 

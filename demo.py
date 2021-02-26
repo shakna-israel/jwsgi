@@ -21,6 +21,11 @@ def thing_verse(self, request, response):
 
 	return self
 
+@app.route("/template2")
+@app.template("test.tpl")
+def template_test(self, request, response):
+	return {"datum": "Hello, World!"}
+
 @app.route("/")
 def index(self, request, response):
 	#print(self['methods'])
